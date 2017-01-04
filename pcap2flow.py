@@ -8,7 +8,6 @@ import signal
 import md5
 
 
-
 def get_http_headers(raw_payload):
     try:
         headers_raw = raw_payload[:raw_payload.index("\r\n\r\n")+2]
@@ -66,4 +65,5 @@ def http_assembler(PCAP):
 
 pcap_file='/Users/edgecrush3r/Downloads/misc1000_traffic.pcap';
 print('Loading pcap '+ pcap_file);
+#
 http_assembler(pcap_file);
