@@ -6,64 +6,59 @@ import sys
 import threading
 import signal
 import md5
+import urllib2;
 
-
-def get_http_headers(raw_payload):
-    try:
-        headers_raw = raw_payload[:raw_payload.index("\r\n\r\n")+2]
-        headers = dict(re.findall(r'(?P<name>.*?):(?P<value>.*?)\r\n', headers_raw))
-    except:
-        return None
-    if 'Content-Type' not in headers:
-        return None
-    return headers
-
-def http_assembler(PCAP):
-    carved_images, faces_detected = 0, 0
-    p = rdpcap(PCAP)
+def follow_http_streams(pcap_filename):
+    p = rdpcap(pcap_filename)
     sessions = p.sessions();
-    session_count=0;
-
-    response_hashes={};
-
+    http_streams = {};
     for session in sessions:
-        print('\nSession...'+ str(session_count));
-        session_count = session_count + 1;
-
-        raw_payload = ''
+        #first_packet=sessions[session][0];
+        raw_payload = '';
         for packet in sessions[session]:
-            #if str(packet[TCP].payload).find('GET'):
-            #    print('FOUND'+ str(packet[TCP].dport));
-            try:
-                if packet[TCP].dport == 80 or packet[TCP].sport == 80:
-                    raw_payload += str(packet[TCP].payload)
-            except:
-                pass
-            #print http_request stuff
+            key = '';
             if packet.haslayer(http.HTTPRequest):
-                http_layer = packet.getlayer(http.HTTPRequest)
-                ip_layer = packet.getlayer(IP)
-                print('- Request from {0[src]} {1[Method]} {1[Host]}{1[Path]}'.format(ip_layer.fields, http_layer.fields));
-            elif packet.haslayer(http.HTTPResponse):
-                http_layer = packet.getlayer(http.HTTPResponse);
-                if 'Content-Encoding' in http_layer.fields:
-                    content_encoding = http_layer.fields['Content-Encoding'].strip();
-                    data = packet[Raw].load;
-                    if content_encoding == 'gzip':
-                        data = zlib.decompress(data, 16)
-                    elif headers['Content-Encoding'] == 'deflate':
-                        data = zlib.decompress(data)
+                #print('Request: '+ str(packet[TCP].time) +' '+ str(packet[TCP].sport));
+                key = str(packet[TCP].sport);
+                if key in http_streams.keys():
+                    http_streams[key] = { 'Request': packet[http.HTTPRequest],'Response': http_streams[key]['Response'] }
+                else:
+                    http_streams[key] = { 'Request': packet[http.HTTPRequest] }
 
-                    headers_raw = raw_payload[:raw_payload.index("\r\n\r\n")+2]
-                    print("- Response:"+ headers_raw);
-                    print("- Response-data:"+ data);
 
-                    #response_hashes[md5.new(data).hexdigest()] = md5.new(data).hexdigest();
+            if packet.haslayer(http.HTTPResponse):
+                #print('Response: '+ str(packet[TCP].time) +' '+ str(packet[TCP].dport));
+                key = str(packet[TCP].dport);
+                if key in http_streams.keys():
+                    http_streams[key] = {'Request': http_streams[key]['Request'], 'Response': packet[http.HTTPResponse] }
+                else:
+                    http_streams[key] = {'Response': packet[http.HTTPResponse] }
 
-        #print("unique responses:"+response_hashes);
-    return
+    return http_streams;
 
-pcap_file='/Users/edgecrush3r/Downloads/misc1000_traffic.pcap';
-print('Loading pcap '+ pcap_file);
-#
-http_assembler(pcap_file);
+
+def get_response_text(http_response):
+    data = '';
+    if 'Content-Encoding' in http_response.fields:
+        content_encoding = http_response.fields['Content-Encoding'].strip();
+        data = http_response[Raw].load;
+        if content_encoding == 'gzip':
+            data = zlib.decompress(data, 16)
+        elif content_encoding == 'deflate':
+            data = zlib.decompress(data);
+
+    return data;
+
+pcap_filename='/Users/edgecrush3r/Downloads/misc1000_traffic.pcap';
+print('Loading pcap '+ pcap_filename);
+
+# Build follow_http_stream
+http_streams=follow_http_streams(pcap_filename);
+# shift to sorted tuples
+for k in sorted(http_streams.keys()):
+    response      = http_streams[k]['Response'];
+    response_text =  get_response_text(response);
+    # if response contains :) print originating request
+    if ':)' in response_text:
+        request = http_streams[k]['Request'];
+        print( k+' '+ urllib2.unquote( request.fields['Host'] +' '+ request.fields['Method'] +' '+  request.fields['Path'] ) );
