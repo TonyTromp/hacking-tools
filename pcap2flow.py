@@ -1,10 +1,10 @@
 from scapy.all import *
 from scapy.layers import http
 from scapy.error import Scapy_Exception
-import os
-import sys
-import threading
-import signal
+#import os
+#import sys
+#import threading
+#import signal
 import md5
 import urllib2;
 
@@ -50,16 +50,43 @@ def get_response_body(http_response):
 
     return data;
 
-pcap_filename='/Users/edgecrush3r/Downloads/misc1000_traffic.pcap';
-print('Loading pcap '+ pcap_filename);
+def get_unique_responses(http_streams):
+    unique_responses = {};
+    for k in http_streams.keys():
+        response      = http_streams[k]['Response'];
+        response_text = get_response_body(response);
+        #response_hashes[md5.new(data).hexdigest()] = md5.new(data).hexdigest();
+        md5hex = md5.new(response_text).hexdigest();
 
-# Build follow_http_stream
-http_streams=follow_http_streams(pcap_filename);
-# shift to sorted tuples
-for k in sorted(http_streams.keys()):
-    response      = http_streams[k]['Response'];
-    response_text =  get_response_body(response);
-    # if response contains :) print originating request
-    if ':)' in response_text:
-        request = http_streams[k]['Request'];
-        print( k+' '+ urllib2.unquote( request.fields['Host'] +' '+ request.fields['Method'] +' '+  request.fields['Path'] ) );
+        if md5hex in unique_responses:
+            unique_responses[md5hex]['Results'] = unique_responses[md5hex]['Results'] +1;
+        else:
+            unique_responses[md5hex] = {'Results': 1, 'Text': response_text};
+
+
+    return unique_responses;
+
+def main():
+    pcap_filename='/Users/edgecrush3r/Downloads/misc1000_traffic.pcap';
+    print('Loading pcap '+ pcap_filename);
+
+    # Build follow_http_stream
+    http_streams=follow_http_streams(pcap_filename);
+
+    # Print unique HTTP Response bodies found (not for this CTF) but might come handy in future
+    unique_responses = get_unique_responses(http_streams);
+    print(unique_responses);
+
+    # shift to sorted tuples
+    for k in sorted(http_streams.keys()):
+        response      = http_streams[k]['Response'];
+        response_text =  get_response_body(response);
+        # if response contains :) print originating request
+        if ':)' in response_text:
+            request = http_streams[k]['Request'];
+            print( k+' '+ urllib2.unquote( request.fields['Host'] +' '+ request.fields['Method'] +' '+  request.fields['Path'] ) );
+
+
+
+if __name__ == "__main__":
+    main();
