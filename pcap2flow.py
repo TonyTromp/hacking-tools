@@ -37,7 +37,8 @@ def follow_http_streams(pcap_filename):
     return http_streams;
 
 
-def get_response_text(http_response):
+#get http response (body) as text and deflate if content-encoding is set
+def get_response_body(http_response):
     data = '';
     if 'Content-Encoding' in http_response.fields:
         content_encoding = http_response.fields['Content-Encoding'].strip();
@@ -57,7 +58,7 @@ http_streams=follow_http_streams(pcap_filename);
 # shift to sorted tuples
 for k in sorted(http_streams.keys()):
     response      = http_streams[k]['Response'];
-    response_text =  get_response_text(response);
+    response_text =  get_response_body(response);
     # if response contains :) print originating request
     if ':)' in response_text:
         request = http_streams[k]['Request'];
